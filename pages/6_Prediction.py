@@ -74,22 +74,25 @@ def render_model_parameters(service: PredictionService):
         column for column in feature_candidates
         if not is_identifier_column(column) and column != target_col
     ]
-    feature_cols = st.multiselect(
-        "📌 Features - Các cột đầu vào",
-        options=feature_candidates,
-        default=feature_candidates[:2],
-    )
+    if not feature_candidates:
+        st.warning(
+            "Không tìm thấy cột số nào khác để làm Features. "
+            "Hãy tải dữ liệu có ít nhất hai cột số, ví dụ study_hours "
+            "và overall_score."
+        )
+        feature_cols = []
+    else:
+        feature_cols = st.multiselect(
+            "📌 Features - Các cột đầu vào",
+            options=feature_candidates,
+            default=feature_candidates[:2],
+        )
     test_percent = st.slider(
         "Tỷ lệ dữ liệu kiểm thử (%)",
         min_value=10,
         max_value=40,
         value=20,
         step=5,
-    )
-    st.info(
-        "Target là biến cần dự đoán. "
-        "Các cột định danh (như student_id) "
-        "đã được hệ thống tự động loại bỏ."
     )
     return target_col, model_type, feature_cols, test_percent
 
@@ -134,7 +137,11 @@ def render_evaluation_metrics(trained_service: PredictionService):
 
     m1.metric("MAE", f"{metrics['MAE']:.4f}")
     m2.metric("RMSE", f"{metrics['RMSE']:.4f}")
-    m3.metric("R² Score", f"{metrics['R2']:.4f}")
+    r2_score = metrics["R2"]
+    m3.metric(
+        "R² Score",
+        f"{r2_score:.4f}" if r2_score is not None else "Không đủ mẫu",
+    )
 
     st.caption(
         "MAE và RMSE càng thấp càng tốt. "
@@ -292,7 +299,7 @@ def main():
     if not isinstance(df, pd.DataFrame) or df.empty:
         st.warning(
             "Chưa có dữ liệu. "
-            "Vui lòng tải dữ liệu ở trang Quản lý dữ liệu."
+            "Vui lòng tải dữ liệu ở trang Upload Data trước."
         )
         st.stop()
 
@@ -304,7 +311,9 @@ def main():
         st.stop()
 
     target_col, model_type, feature_cols, test_percent = render_model_parameters(service)
-    
+    if not feature_cols:
+        return
+
     handle_training(service, feature_cols, target_col, test_percent, model_type)
 
     trained_service = st.session_state.get("trained_prediction_service")

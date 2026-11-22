@@ -178,7 +178,11 @@ def render_metrics_section(report: ReportService):
             metric_cols[1].metric("RMSE", f"{report.model_metrics['RMSE']:.4f}")
 
         if "R2" in report.model_metrics:
-            metric_cols[2].metric("R²", f"{report.model_metrics['R2']:.4f}")
+            r2_score = report.model_metrics["R2"]
+            metric_cols[2].metric(
+                "R²",
+                f"{r2_score:.4f}" if r2_score is not None else "Không đủ mẫu",
+            )
 
         st.dataframe(
             report.get_metrics_dataframe(),

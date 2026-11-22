@@ -1,6 +1,7 @@
 """Tests for the prediction and report features."""
 
 import unittest
+from decimal import Decimal
 from io import BytesIO
 
 import pandas as pd
@@ -40,6 +41,57 @@ class PredictionServiceTests(unittest.TestCase):
             self.service.predict_new_sample({"study_hours": 13}),
             float,
         )
+
+    def test_decimal_columns_are_available_for_prediction(self) -> None:
+        decimal_df = pd.DataFrame(
+            {
+                "student_id": range(100, 108),
+                "age": range(17, 25),
+                "study_hours": [Decimal(str(value)) for value in range(1, 9)],
+                "overall_score": [
+                    Decimal(str(value * 5 + 40)) for value in range(1, 9)
+                ],
+            }
+        )
+        service = PredictionService(decimal_df)
+
+        self.assertEqual(
+            service.get_feature_candidates("age"),
+            ["study_hours", "overall_score"],
+        )
+        metrics = service.train_and_evaluate(
+            feature_cols=["study_hours"],
+            target_col="overall_score",
+        )
+        self.assertGreaterEqual(metrics["R2"], 0.9)
+
+    def test_three_rows_train_and_report_r2_as_unavailable(self) -> None:
+        df = pd.DataFrame(
+            {
+                "study_hours": [1, 2, 3],
+                "score": [10, 20, 30],
+            }
+        )
+        service = PredictionService(df)
+
+        metrics = service.train_and_evaluate(
+            feature_cols=["study_hours"],
+            target_col="score",
+        )
+
+        self.assertEqual(len(service.result_df), 1)
+        self.assertIsNone(metrics["R2"])
+
+    def test_two_rows_give_a_clear_training_error(self) -> None:
+        service = PredictionService(
+            pd.DataFrame({"study_hours": [1, 2], "score": [10, 20]})
+        )
+
+        with self.assertRaisesRegex(ValueError, "tối thiểu 3 dòng"):
+            service.train_and_evaluate(
+                feature_cols=["study_hours"],
+                target_col="score",
+            )
 
 
 class ReportServiceTests(unittest.TestCase):

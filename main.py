@@ -35,9 +35,7 @@ st.markdown(
     """
 )
 
-if DEFAULT_DATA_PATH.is_file():
-    st.success(f"Đã tìm thấy dữ liệu mẫu: `data/{DEFAULT_DATA_PATH.name}`")
-else:
+if not DEFAULT_DATA_PATH.is_file():
     st.warning(
         "Chưa tìm thấy dữ liệu mẫu `data/Student_Performance.csv`. "
         "Hãy tải dữ liệu lên ở trang Upload Data để dùng các trang khác."

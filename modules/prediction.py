@@ -34,7 +34,7 @@ class PredictionService:
         # Lưu trữ kết quả sau huấn luyện
         self.result_df = pd.DataFrame()
 
-        self.metrics = {
+        self.metrics: dict[str, float | None] = {
             "MAE": 0.0,
             "RMSE": 0.0,
             "R2": 0.0
@@ -80,11 +80,21 @@ class PredictionService:
     # =====================================================
 
     def get_numeric_columns(self) -> list:
-        """Trả về danh sách tên các cột có kiểu dữ liệu số."""
+        """Return numeric and numeric-like columns, including database decimals."""
+        numeric_columns = []
+        for column in self.raw_df.columns:
+            values = self.raw_df[column]
+            if pd.api.types.is_bool_dtype(values):
+                continue
+            if pd.api.types.is_numeric_dtype(values):
+                numeric_columns.append(column)
+                continue
 
-        return self.raw_df.select_dtypes(
-            include=[np.number]
-        ).columns.tolist()
+            converted = pd.to_numeric(values, errors="coerce")
+            if values.notna().any() and converted.notna().sum() == values.notna().sum():
+                numeric_columns.append(column)
+
+        return numeric_columns
 
     # =====================================================
     # 3. LẤY DANH SÁCH TARGET HỢP LỆ
@@ -178,10 +188,10 @@ class PredictionService:
         # Loại bỏ dòng chứa giá trị NaN
         clean_df.dropna(inplace=True)
 
-        if len(clean_df) < 5:
+        if len(clean_df) < 3:
             raise ValueError(
-                "Cần tối thiểu 5 dòng dữ liệu số hợp lệ "
-                "để huấn luyện mô hình."
+                "Cần tối thiểu 3 dòng dữ liệu số hợp lệ sau khi bỏ "
+                f"giá trị trống; hiện chỉ còn {len(clean_df)} dòng."
             )
 
         if clean_df[target_col].nunique() < 2:
@@ -213,6 +223,9 @@ class PredictionService:
             target_col
         )
 
+        if not 0 < test_size < 1:
+            raise ValueError("Tỷ lệ dữ liệu kiểm thử phải nằm giữa 0 và 1.")
+
         self.feature_cols = feature_cols.copy()
         self.target_col = target_col
 
@@ -226,10 +239,15 @@ class PredictionService:
         y = clean_df[self.target_col]
 
         # Chia dữ liệu Train và Test
+        minimum_test_rows = 2 if len(clean_df) >= 4 else 1
+        test_rows = min(
+            max(minimum_test_rows, int(np.ceil(len(clean_df) * test_size))),
+            len(clean_df) - 2,
+        )
         X_train, X_test, y_train, y_test = train_test_split(
             X,
             y,
-            test_size=test_size,
+            test_size=test_rows,
             random_state=random_state
         )
 
@@ -258,11 +276,7 @@ class PredictionService:
             np.sqrt(np.mean(errors ** 2))
         )
 
-        r2 = (
-            float(r2_score(y_actual_array, y_pred_array))
-            if len(y_test) >= 2
-            else 0.0
-        )
+        r2 = float(r2_score(y_actual_array, y_pred_array)) if len(y_test) >= 2 else None
 
         self.metrics = {
             "MAE": mae,
