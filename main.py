@@ -16,7 +16,7 @@ st.set_page_config(
 
 st.title("📊 Hệ thống phân tích dữ liệu")
 st.write(
-    "Ứng dụng hỗ trợ tải lên, quản lý, làm sạch và phân tích dữ liệu. "
+    "Ứng dụng hỗ trợ tải lên, làm sạch, phân tích, dự đoán và xuất báo cáo. "
     "Chọn một chức năng ở thanh điều hướng bên trái để bắt đầu."
 )
 
@@ -27,6 +27,8 @@ st.markdown(
     - **Quản lý dữ liệu**: xem và tìm kiếm dữ liệu.
     - **Làm sạch dữ liệu**: xử lý dữ liệu thiếu, trùng lặp và ngoại lệ.
     - **Phân tích dữ liệu**: xem thống kê mô tả, biểu đồ và tương quan.
+    - **Prediction**: dự đoán kết quả bằng hồi quy tuyến tính.
+    - **Reports**: xem tổng hợp và tải báo cáo Excel.
 
     Các trang chức năng nằm trong thư mục `pages/`; Streamlit sẽ tự hiển thị
     chúng trong thanh điều hướng khi chạy ứng dụng này.
@@ -38,7 +40,7 @@ if DEFAULT_DATA_PATH.is_file():
 else:
     st.warning(
         "Chưa tìm thấy dữ liệu mẫu `data/Student_Performance.csv`. "
-        "Bạn vẫn có thể tải dữ liệu của mình lên ở trang phân tích."
+        "Hãy tải dữ liệu lên ở trang Upload Data để dùng các trang khác."
     )
 
 st.caption("Chạy ứng dụng từ thư mục gốc bằng lệnh: `streamlit run main.py`.")

@@ -1,7 +1,7 @@
 """
-Prediction Page - Ứng dụng Dự đoán Dữ liệu Machine Learning
+Prediction Page - Ứng dụng dự đoán dữ liệu bằng Machine Learning
 - Mô hình: Linear Regression / Ridge Regression
-- Hỗ trợ: Numeric + Categorical Features
+- Features và Target: cột dữ liệu số
 - Đánh giá: MAE, RMSE, R2
 - Trực quan hóa: Biểu đồ Actual vs Predicted (Line & Scatter)
 - Dự đoán mẫu dữ liệu mới
@@ -9,7 +9,6 @@ Prediction Page - Ứng dụng Dự đoán Dữ liệu Machine Learning
 
 import streamlit as st
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 
 from modules.prediction import PredictionService
@@ -30,13 +29,14 @@ def configure_page():
 
 
 def load_dataset():
-    """Lấy dữ liệu từ st.session_state theo thứ tự ưu tiên."""
+    """Ưu tiên dữ liệu đã làm sạch, sau đó dùng dữ liệu tải lên."""
+    cleaned_df = st.session_state.get("cleaned_dataset")
+    if isinstance(cleaned_df, pd.DataFrame) and not cleaned_df.empty:
+        return cleaned_df
+
     return st.session_state.get(
-        "cleaned_df",
-        st.session_state.get(
-            "df",
-            st.session_state.get("data")
-        )
+        "dataset",
+        st.session_state.get("df", st.session_state.get("data")),
     )
 
 def is_identifier_column(column):
@@ -116,6 +116,7 @@ def handle_training(service: PredictionService, feature_cols, target_col, test_p
             st.session_state["prediction_metrics"] = service.metrics.copy()
             st.session_state["prediction_target"] = target_col
             st.session_state["prediction_features"] = feature_cols
+            st.session_state["model_name"] = model_type
 
             st.success("Huấn luyện mô hình thành công!")
 

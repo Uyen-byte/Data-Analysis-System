@@ -26,15 +26,16 @@ def configure_page():
 
 def load_session_data():
     """Trích xuất và chuẩn hóa dữ liệu cùng các kết quả mô hình từ st.session_state."""
-    # Dữ liệu gốc
-    df = st.session_state.get("df")
+    df = st.session_state.get("dataset")
     if not isinstance(df, pd.DataFrame):
-        df = st.session_state.get("data")
+        df = st.session_state.get("df", st.session_state.get("data"))
 
-    # Dữ liệu đã Cleaning
-    cleaned_df = st.session_state.get("cleaned_df")
+    cleaned_df = st.session_state.get("cleaned_dataset")
     if not isinstance(cleaned_df, pd.DataFrame):
-        cleaned_df = st.session_state.get("cleaned_data")
+        cleaned_df = st.session_state.get(
+            "cleaned_df",
+            st.session_state.get("cleaned_data"),
+        )
 
     if not isinstance(cleaned_df, pd.DataFrame) or cleaned_df.empty:
         cleaned_df = None

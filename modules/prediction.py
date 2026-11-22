@@ -105,13 +105,13 @@ class PredictionService:
 
     def get_feature_candidates(self, target_col: str) -> list:
         """
-        Trả về danh sách Features hợp lệ.
+        Trả về các cột số hợp lệ làm Features.
         Loại bỏ Target và các cột định danh.
         """
 
         return [
             col
-            for col in self.raw_df.columns
+            for col in self.get_numeric_columns()
             if col != target_col
             and not self._is_identifier_column(col)
         ]
