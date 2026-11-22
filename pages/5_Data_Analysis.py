@@ -63,18 +63,55 @@ st.caption("Thống kê mô tả, khám phá tương quan và trực quan hóa d
 
 with st.sidebar:
     st.header("Nguồn dữ liệu")
-    uploaded_file = st.file_uploader("Tải tệp CSV", type=["csv"])
-    st.caption(
-        f"Dữ liệu mặc định: `{DEFAULT_DATA_PATH.name}`"
-        if uploaded_file is None
-        else f"Đang dùng tệp: `{uploaded_file.name}`"
+    uploaded_file = st.file_uploader(
+        "Tải tệp CSV",
+        type=["csv"],
+        key="data_analysis_upload",
     )
 
-data_source: str | bytes = (
-    uploaded_file.getvalue() if uploaded_file is not None else str(DEFAULT_DATA_PATH)
-)
+df = None
+if uploaded_file is not None:
+    data_source = uploaded_file.getvalue()
+    try:
+        df = load_data(data_source)
+    except (
+        pd.errors.EmptyDataError,
+        pd.errors.ParserError,
+        UnicodeDecodeError,
+    ) as error:
+        st.error(f"Không thể đọc tệp CSV: {error}")
+        st.stop()
+    st.session_state["analysis_uploaded_dataset"] = df.copy()
+    st.session_state["analysis_uploaded_file_name"] = uploaded_file.name
+    source_label = f"Đang dùng tệp: `{uploaded_file.name}`"
+else:
+    analysis_dataset = st.session_state.get("analysis_uploaded_dataset")
+    cleaned_dataset = st.session_state.get("cleaned_dataset")
+    session_dataset = st.session_state.get("dataset")
+    uploaded_dataset = st.session_state.get("uploaded_dataset")
+
+    if isinstance(analysis_dataset, pd.DataFrame) and not analysis_dataset.empty:
+        df = analysis_dataset.copy()
+        file_name = st.session_state.get("analysis_uploaded_file_name", "CSV")
+        source_label = f"Đang giữ tệp đã tải: `{file_name}`"
+    elif isinstance(cleaned_dataset, pd.DataFrame) and not cleaned_dataset.empty:
+        df = cleaned_dataset.copy()
+        source_label = "Đang dùng dữ liệu đã làm sạch."
+    elif isinstance(session_dataset, pd.DataFrame) and not session_dataset.empty:
+        df = session_dataset.copy()
+        source_label = "Đang dùng dữ liệu trong phiên làm việc."
+    elif isinstance(uploaded_dataset, pd.DataFrame) and not uploaded_dataset.empty:
+        df = uploaded_dataset.copy()
+        source_label = "Đang dùng dữ liệu đã tải lên."
+    else:
+        source_label = f"Dữ liệu mặc định: `{DEFAULT_DATA_PATH.name}`"
+
+with st.sidebar:
+    st.caption(source_label)
+
 try:
-    df = load_data(data_source)
+    if df is None:
+        df = load_data(str(DEFAULT_DATA_PATH))
 except (
     FileNotFoundError,
     pd.errors.EmptyDataError,

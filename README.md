@@ -22,10 +22,13 @@ Các trang **Upload Data**, **Data Management**, **Data Cleaning**,
 Trang phân tích dùng `data\Student_Performance.csv` làm dữ liệu mặc định; các
 trang làm sạch, dự đoán và báo cáo dùng dữ liệu trong phiên làm việc.
 
-Các trang **Prediction**, **Reports**, **Data Cleaning** và **Data Analysis**
-có thể chạy với dữ liệu trong phiên làm việc. Trang **Upload Data** chỉ cần
-PostgreSQL khi bấm lưu dữ liệu; trang **Data Management** cần PostgreSQL để đọc
-và quản lý dữ liệu.
+Trang **Upload Data** kiểm tra các cột bắt buộc và giữ nguyên dữ liệu gốc trong
+phiên làm việc, không tự xóa dữ liệu trùng. Hãy dùng **Data Cleaning** để xử lý
+dữ liệu, so sánh bảng trước/sau, rồi lưu dữ liệu đã làm sạch vào PostgreSQL tại
+trang này.
+Trang **Data Management** cần PostgreSQL để đọc và quản lý dữ liệu. Các trang
+**Prediction**, **Reports**, **Data Cleaning** và **Data Analysis** có thể làm
+việc với dữ liệu trong phiên.
 
 Để dùng PostgreSQL, tạo `database\.env` với các biến sau (thay bằng thông tin
 của máy bạn):

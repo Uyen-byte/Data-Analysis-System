@@ -1,8 +1,11 @@
 import streamlit as st
 import pandas as pd
 import io
+from psycopg2 import Error as PostgreSQLError
 
+from database.dataset_repository import DatasetRepository
 from modules.data_cleaning import DataCleaning
+from modules.data_loader import prepare_for_database
 
 
 # Tiêu đề trang
@@ -65,7 +68,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "Chuyển đổi kiểu",
     "Chuẩn hóa",
     "Ngoại lệ",
-    "Kết quả"
+    "So sánh & xuất"
 ])
 
 with tab1:
@@ -152,9 +155,14 @@ with tab1:
                             value=value
                         )
 
-                        st.success(
-                            f"Đã xử lý: {result}"
-                        )
+                        filled_cells = sum(result.values())
+                        if filled_cells:
+                            st.success(
+                                f"Đã bổ sung {filled_cells:,} ô dữ liệu "
+                                f"trong {len(result)} cột."
+                            )
+                        else:
+                            st.info("Không có giá trị thiếu cần bổ sung.")
 
                         st.dataframe(cleaner.df, use_container_width=True)
 
@@ -183,9 +191,14 @@ with tab1:
                             columns=selected_columns
                         )
 
-                        st.success(
-                            f"Kết quả xử lý: {result}"
-                        )
+                        filled_cells = sum(result.values())
+                        if filled_cells:
+                            st.success(
+                                f"Đã bổ sung {filled_cells:,} ô dữ liệu "
+                                f"trong {len(result)} cột."
+                            )
+                        else:
+                            st.info("Không có giá trị thiếu cần bổ sung.")
 
                         st.dataframe(
                             cleaner.df,
@@ -243,6 +256,7 @@ with tab2:
     duplicate_columns = st.multiselect(
         "Chọn cột dùng để kiểm tra trùng (để trống là toàn bộ cột)",
         list(cleaner.df.columns),
+        default=["student_id"] if "student_id" in cleaner.df.columns else [],
         key="duplicate_columns"
     )
 
@@ -310,9 +324,16 @@ with tab3:
                 target_type
             )
 
-            st.success("Đã thực hiện chuyển đổi.")
-
-            st.write("Chi tiết kết quả:", result)
+            if result["failed_count"]:
+                st.warning(
+                    f"Cột {selected_column} đã được chuyển đổi; "
+                    f"{result['failed_count']} giá trị không phù hợp "
+                    "đã được chuyển thành ô trống."
+                )
+            else:
+                st.success(
+                    f"Đã chuyển cột {selected_column} sang kiểu {target_type}."
+                )
 
             st.dataframe(
                 cleaner.get_data_types(),
@@ -370,9 +391,20 @@ with tab4:
                         case=case_map[case_label]
                     )
 
-                    st.success("Đã chuẩn hóa dữ liệu.")
+                    standardized_columns = result["standardized"]
+                    if standardized_columns:
+                        st.success(
+                            f"Đã chuẩn hóa {len(standardized_columns)} cột: "
+                            f"{', '.join(standardized_columns)}."
+                        )
+                    else:
+                        st.info("Không có cột văn bản nào cần chuẩn hóa.")
 
-                    st.write("Kết quả:", result)
+                    if result["skipped"]:
+                        st.caption(
+                            "Đã bỏ qua các cột không phải văn bản: "
+                            f"{', '.join(result['skipped'])}."
+                        )
 
                     st.dataframe(
                         cleaner.df,
@@ -470,11 +502,16 @@ with tab5:
                         action=action_map[action_label]
                     )
 
-                    st.success(
-                        f"Đã xử lý {result['affected_values']} giá trị ngoại lệ."
-                    )
-
-                    st.write("Chi tiết:", result)
+                    if result["action"] == "clip":
+                        st.success(
+                            f"Đã điều chỉnh {result['affected_values']} "
+                            "giá trị ngoại lệ theo giới hạn IQR."
+                        )
+                    else:
+                        st.success(
+                            f"Đã xóa {result['removed_rows']} dòng chứa "
+                            f"{result['affected_values']} giá trị ngoại lệ."
+                        )
 
                     st.dataframe(
                         cleaner.df,
@@ -489,33 +526,47 @@ with tab5:
 
 with tab6:
 
-    st.subheader("So sánh dữ liệu trước và sau xử lý")
+    st.subheader("So sánh dữ liệu trước và sau khi làm sạch")
+
+    cleaned_df = cleaner.get_cleaned_data()
+    summary = cleaner.get_cleaning_summary()
+    comparison_metrics = st.columns(3)
+    comparison_metrics[0].metric(
+        "Số dòng trước khi làm sạch",
+        f"{summary['original_rows']:,}",
+    )
+    comparison_metrics[1].metric(
+        "Số dòng sau khi làm sạch",
+        f"{summary['current_rows']:,}",
+    )
+    comparison_metrics[2].metric(
+        "Số dòng đã loại bỏ",
+        f"{summary['original_rows'] - summary['current_rows']:,}",
+    )
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("### Dữ liệu ban đầu")
+        st.markdown("### Bảng trước khi làm sạch")
 
         st.dataframe(
             cleaner.original_df,
-            use_container_width=True
+            use_container_width=True,
+            hide_index=True,
         )
 
     with col2:
-        st.markdown("### Dữ liệu đã làm sạch")
-
-        cleaned_df = cleaner.get_cleaned_data()
+        st.markdown("### Bảng sau khi làm sạch")
 
         st.dataframe(
             cleaned_df,
-            use_container_width=True
+            use_container_width=True,
+            hide_index=True,
         )
 
     st.divider()
 
     st.subheader("Tổng kết quá trình làm sạch")
-
-    summary = cleaner.get_cleaning_summary()
 
     st.write(
         "Số dòng ban đầu:",
@@ -583,6 +634,21 @@ with tab6:
         file_name="cleaned_data.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
+    st.divider()
+
+    st.subheader("Lưu dữ liệu đã làm sạch vào PostgreSQL")
+    if st.button("Lưu dữ liệu đã làm sạch", type="primary"):
+        try:
+            database_data = prepare_for_database(cleaned_df)
+            repository = DatasetRepository()
+            repository.create_table()
+            saved_count = repository.save_dataframe(database_data)
+            st.success(
+                f"Đã lưu {saved_count:,} bản ghi đã làm sạch vào PostgreSQL."
+            )
+        except (ValueError, TypeError, KeyError, PostgreSQLError) as error:
+            st.error(f"Không thể lưu dữ liệu: {error}")
 
     st.divider()
 
