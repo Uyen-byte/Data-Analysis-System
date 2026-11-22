@@ -39,164 +39,58 @@ def load_dataset():
         )
     )
 
+def is_identifier_column(column):
+    column_parts = str(column).strip().lower().replace("-", "_").split("_")
+    identifier_keywords = {"id", "code", "index", "key", "stt"}
+    return any(part in identifier_keywords for part in column_parts)
+
+
 def render_model_parameters(service: PredictionService):
     """Thiết lập tham số mô hình."""
-
-    # Lấy danh sách cột số
-    numeric_cols = service.get_target_candidates()
-
-    # Chỉ loại student_id khỏi danh sách Target
+    numeric_columns = service.get_target_candidates()
     target_candidates = [
-        col for col in numeric_cols
-        if str(col).strip().lower() != "student_id"
+        column for column in numeric_columns
+        if not is_identifier_column(column)
     ]
 
     if not target_candidates:
-        st.error("Không có cột phù hợp làm Target.")
+        st.error("Không có cột số phù hợp làm Target.")
         st.stop()
 
     col1, col2 = st.columns(2)
-
     with col1:
         target_col = st.selectbox(
             "🎯 Target - Cột cần dự đoán",
-            options=target_candidates
+            target_candidates,
         )
-
     with col2:
         model_type = st.selectbox(
             "🤖 Chọn mô hình",
-            ["Linear Regression", "Ridge Regression"]
+            ["Linear Regression", "Ridge Regression"],
         )
 
-    # Lấy danh sách Features
-    feature_candidates = (
-        service.get_feature_candidates(target_col)
-        if hasattr(service, "get_feature_candidates")
-        else [
-            c for c in service.raw_df.columns
-            if c != target_col
-        ]
-    )
-
-    # Giữ nguyên student_id trong Features nếu dữ liệu có cột này
+    feature_candidates = service.get_feature_candidates(target_col)
     feature_candidates = [
-        col for col in feature_candidates
-        if col != target_col
+        column for column in feature_candidates
+        if not is_identifier_column(column) and column != target_col
     ]
-
-    default_features = feature_candidates[:2]
-
     feature_cols = st.multiselect(
         "📌 Features - Các cột đầu vào",
         options=feature_candidates,
-        default=default_features
+        default=feature_candidates[:2],
     )
-
     test_percent = st.slider(
         "Tỷ lệ dữ liệu kiểm thử (%)",
         min_value=10,
         max_value=40,
         value=20,
-        step=5
+        step=5,
     )
-
-    st.info(
-        "Target là biến cần dự đoán. "
-        "Cột student_id chỉ bị loại khỏi danh sách Target."
-    )
-
-    return target_col, model_type, feature_cols, test_percent
-
-
-    # Hàm kiểm tra cột định danh
- def is_identifier_column(col):
-        col_lower = str(col).strip().lower()
-
-        excluded_keywords = [
-            "id",
-            "code",
-            "index",
-            "key",
-            "stt"
-        ]
-
-        # Tách tên cột thành các thành phần
-        column_parts = col_lower.replace("-", "_").split("_")
-
-        return any(
-            keyword in column_parts
-            for keyword in excluded_keywords
-        )
-
-    # Loại bỏ cột ID khỏi danh sách Target
-    target_candidates = [
-        col for col in numeric_cols
-        if not is_identifier_column(col)
-    ]
-
-    # Không cho phép ID quay trở lại danh sách Target
-    if not target_candidates:
-        st.error(
-            "Dataset không có cột số phù hợp làm Target. "
-            "Các cột định danh như student_id đã được loại bỏ. "
-            "Hãy kiểm tra dữ liệu."
-        )
-        st.stop()
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        target_col = st.selectbox(
-            "🎯 Target - Cột cần dự đoán",
-            target_candidates
-        )
-
-    with col2:
-        model_type = st.selectbox(
-            "🤖 Chọn mô hình",
-            ["Linear Regression", "Ridge Regression"]
-        )
-
-    # Lấy danh sách Features
-    feature_candidates = (
-        service.get_feature_candidates(target_col)
-        if hasattr(service, "get_feature_candidates")
-        else [
-            c for c in service.raw_df.columns
-            if c != target_col
-        ]
-    )
-
-    # Loại bỏ cột ID khỏi Features
-    feature_candidates = [
-        col for col in feature_candidates
-        if not is_identifier_column(col)
-        and col != target_col
-    ]
-
-    default_features = feature_candidates[:2]
-
-    feature_cols = st.multiselect(
-        "📌 Features - Các cột đầu vào",
-        options=feature_candidates,
-        default=default_features
-    )
-
-    test_percent = st.slider(
-        "Tỷ lệ dữ liệu kiểm thử (%)",
-        min_value=10,
-        max_value=40,
-        value=20,
-        step=5
-    )
-
     st.info(
         "Target là biến cần dự đoán. "
         "Các cột định danh (như student_id) "
         "đã được hệ thống tự động loại bỏ."
     )
-
     return target_col, model_type, feature_cols, test_percent
 
 def handle_training(service: PredictionService, feature_cols, target_col, test_percent, model_type):
