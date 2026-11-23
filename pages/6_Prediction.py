@@ -22,10 +22,6 @@ def configure_page():
         layout="wide"
     )
     st.title("🔮 Dự đoán dữ liệu (Prediction)")
-    st.caption(
-        "Huấn luyện mô hình Machine Learning, "
-        "đánh giá và dự đoán dữ liệu mới."
-    )
 
 
 def load_dataset():
@@ -76,16 +72,19 @@ def render_model_parameters(service: PredictionService):
     ]
     if not feature_candidates:
         st.warning(
-            "Không tìm thấy cột số nào khác để làm Features. "
-            "Hãy tải dữ liệu có ít nhất hai cột số, ví dụ study_hours "
-            "và overall_score."
+            "Không tìm thấy cột phù hợp làm Features ngoài Target và cột định danh."
         )
         feature_cols = []
     else:
+        numeric_columns = set(service.get_numeric_columns())
+        numeric_defaults = [
+            column for column in feature_candidates
+            if column in numeric_columns
+        ][:2]
         feature_cols = st.multiselect(
-            "📌 Features - Các cột đầu vào",
+            "📌 Features - Các cột đầu vào (có thể gồm cột phân loại)",
             options=feature_candidates,
-            default=feature_candidates[:2],
+            default=numeric_defaults or feature_candidates[:2],
         )
     test_percent = st.slider(
         "Tỷ lệ dữ liệu kiểm thử (%)",
@@ -120,6 +119,12 @@ def handle_training(service: PredictionService, feature_cols, target_col, test_p
             st.session_state["prediction_target"] = target_col
             st.session_state["prediction_features"] = feature_cols
             st.session_state["model_name"] = model_type
+            st.session_state["_prediction_training_config"] = (
+                target_col,
+                tuple(feature_cols),
+                model_type,
+                test_percent,
+            )
 
             st.success("Huấn luyện mô hình thành công!")
 
@@ -316,8 +321,18 @@ def main():
 
     handle_training(service, feature_cols, target_col, test_percent, model_type)
 
+    training_config = (
+        target_col,
+        tuple(feature_cols),
+        model_type,
+        test_percent,
+    )
     trained_service = st.session_state.get("trained_prediction_service")
-    if trained_service is not None and getattr(trained_service, "is_trained", False):
+    if (
+        trained_service is not None
+        and getattr(trained_service, "is_trained", False)
+        and st.session_state.get("_prediction_training_config") == training_config
+    ):
         render_evaluation_metrics(trained_service)
         render_visualizations(trained_service, target_col)
         render_prediction_table(trained_service)

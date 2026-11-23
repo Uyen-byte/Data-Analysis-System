@@ -23,10 +23,10 @@ class PredictionServiceTests(unittest.TestCase):
         )
         self.service = PredictionService(self.df)
 
-    def test_feature_candidates_are_numeric_and_exclude_identifiers(self) -> None:
+    def test_feature_candidates_include_categories_and_exclude_identifiers(self) -> None:
         self.assertEqual(
             self.service.get_feature_candidates("score"),
-            ["study_hours"],
+            ["study_hours", "group"],
         )
 
     def test_training_and_prediction_with_numeric_features(self) -> None:
@@ -41,6 +41,32 @@ class PredictionServiceTests(unittest.TestCase):
             self.service.predict_new_sample({"study_hours": 13}),
             float,
         )
+
+    def test_training_and_prediction_with_categorical_feature(self) -> None:
+        service = PredictionService(
+            pd.DataFrame(
+                {
+                    "age": [14, 18, 17, 16, 15, 19, 16, 17],
+                    "gender": [
+                        "male", "female", "female", "other",
+                        "male", "female", "other", "male",
+                    ],
+                    "study_hours": [3.1, 3.7, 7.9, 1.1, 2.0, 4.0, 5.2, 6.1],
+                }
+            )
+        )
+
+        self.assertIn("gender", service.get_feature_candidates("age"))
+        service.train_and_evaluate(
+            feature_cols=["gender", "study_hours"],
+            target_col="age",
+        )
+        prediction = service.predict_new_sample(
+            {"gender": "female", "study_hours": 4.5}
+        )
+
+        self.assertEqual(len(service.result_df), 2)
+        self.assertIsInstance(prediction, float)
 
     def test_decimal_columns_are_available_for_prediction(self) -> None:
         decimal_df = pd.DataFrame(

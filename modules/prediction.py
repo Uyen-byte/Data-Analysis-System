@@ -7,9 +7,12 @@ Mô tả: Xử lý nghiệp vụ huấn luyện mô hình hồi quy tuyến tín
 import numpy as np
 import pandas as pd
 
-from sklearn.model_selection import train_test_split
+from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.metrics import r2_score
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder
 
 
 class PredictionService:
@@ -79,22 +82,37 @@ class PredictionService:
     # 2. LẤY DANH SÁCH CỘT SỐ
     # =====================================================
 
+    def _is_numeric_column(self, column: str) -> bool:
+        """Return whether a column contains numeric values, including Decimals."""
+        values = self.raw_df[column]
+        if pd.api.types.is_bool_dtype(values):
+            return False
+        if pd.api.types.is_numeric_dtype(values):
+            return True
+
+        converted = pd.to_numeric(values, errors="coerce")
+        return bool(
+            values.notna().any()
+            and converted.notna().sum() == values.notna().sum()
+        )
+
     def get_numeric_columns(self) -> list:
         """Return numeric and numeric-like columns, including database decimals."""
         numeric_columns = []
         for column in self.raw_df.columns:
-            values = self.raw_df[column]
-            if pd.api.types.is_bool_dtype(values):
-                continue
-            if pd.api.types.is_numeric_dtype(values):
-                numeric_columns.append(column)
-                continue
-
-            converted = pd.to_numeric(values, errors="coerce")
-            if values.notna().any() and converted.notna().sum() == values.notna().sum():
+            if self._is_numeric_column(column):
                 numeric_columns.append(column)
 
         return numeric_columns
+
+    def get_categorical_columns(self) -> list:
+        """Return non-numeric columns that contain at least one usable value."""
+        return [
+            column
+            for column in self.raw_df.columns
+            if self.raw_df[column].notna().any()
+            and not self._is_numeric_column(column)
+        ]
 
     # =====================================================
     # 3. LẤY DANH SÁCH TARGET HỢP LỆ
@@ -115,15 +133,16 @@ class PredictionService:
 
     def get_feature_candidates(self, target_col: str) -> list:
         """
-        Trả về các cột số hợp lệ làm Features.
+        Trả về các cột số và phân loại hợp lệ làm Features.
         Loại bỏ Target và các cột định danh.
         """
 
         return [
             col
-            for col in self.get_numeric_columns()
+            for col in self.raw_df.columns
             if col != target_col
             and not self._is_identifier_column(col)
+            and self.raw_df[col].notna().any()
         ]
 
     # =====================================================
@@ -178,12 +197,24 @@ class PredictionService:
         # Lấy dữ liệu được chọn
         clean_df = self.raw_df[selected_cols].copy()
 
-        # Ép kiểu dữ liệu sang dạng số
-        for col in selected_cols:
-            clean_df[col] = pd.to_numeric(
-                clean_df[col],
-                errors="coerce"
-            )
+        if not self._is_numeric_column(target_col):
+            raise TypeError(f"Cột Target '{target_col}' phải chứa dữ liệu số.")
+
+        self._feature_types = {}
+        for col in feature_cols:
+            if self._is_numeric_column(col):
+                clean_df[col] = pd.to_numeric(clean_df[col], errors="coerce")
+                self._feature_types[col] = "numeric"
+            else:
+                clean_df[col] = clean_df[col].map(
+                    lambda value: str(value) if pd.notna(value) else np.nan
+                )
+                self._feature_types[col] = "categorical"
+
+        clean_df[target_col] = pd.to_numeric(
+            clean_df[target_col],
+            errors="coerce",
+        )
 
         # Loại bỏ dòng chứa giá trị NaN
         clean_df.dropna(inplace=True)
@@ -229,12 +260,6 @@ class PredictionService:
         self.feature_cols = feature_cols.copy()
         self.target_col = target_col
 
-        # Lưu kiểu dữ liệu Features
-        self._feature_types = {
-            col: "numeric"
-            for col in self.feature_cols
-        }
-
         X = clean_df[self.feature_cols]
         y = clean_df[self.target_col]
 
@@ -251,11 +276,40 @@ class PredictionService:
             random_state=random_state
         )
 
-        # Lựa chọn mô hình
-        if model_type == "Ridge Regression":
-            self.model = Ridge(alpha=1.0)
+        estimator = (
+            Ridge(alpha=1.0)
+            if model_type == "Ridge Regression"
+            else LinearRegression()
+        )
+
+        categorical_features = [
+            column for column in self.feature_cols
+            if self._feature_types[column] == "categorical"
+        ]
+        numeric_features = [
+            column for column in self.feature_cols
+            if self._feature_types[column] == "numeric"
+        ]
+        if categorical_features:
+            preprocessor = ColumnTransformer(
+                transformers=[
+                    ("numeric", "passthrough", numeric_features),
+                    (
+                        "categorical",
+                        OneHotEncoder(handle_unknown="ignore"),
+                        categorical_features,
+                    ),
+                ],
+                remainder="drop",
+            )
+            self.model = Pipeline(
+                [
+                    ("preprocessor", preprocessor),
+                    ("regressor", estimator),
+                ]
+            )
         else:
-            self.model = LinearRegression()
+            self.model = estimator
 
         # Huấn luyện mô hình
         self.model.fit(X_train, y_train)
@@ -323,9 +377,15 @@ class PredictionService:
                     f"Thiếu giá trị đầu vào cho cột '{col}'."
                 )
 
-            row_values.append(
-                float(input_dict[col])
-            )
+            if self._feature_types[col] == "numeric":
+                try:
+                    row_values.append(float(input_dict[col]))
+                except (TypeError, ValueError) as error:
+                    raise ValueError(
+                        f"Giá trị của Feature '{col}' phải là số."
+                    ) from error
+            else:
+                row_values.append(str(input_dict[col]))
 
         # Tạo DataFrame theo đúng thứ tự Features
         input_df = pd.DataFrame(

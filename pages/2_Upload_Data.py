@@ -11,7 +11,6 @@ st.write(
     "Tải dữ liệu kết quả học tập từ CSV hoặc Excel. "
     "Dữ liệu được giữ nguyên để bạn xử lý tại trang Data Cleaning trước khi lưu."
 )
-
 uploaded_file = st.file_uploader(
     "Chọn file dữ liệu",
     type=["csv", "xlsx", "xls"],

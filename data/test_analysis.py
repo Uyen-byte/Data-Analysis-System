@@ -2,6 +2,7 @@
 
 import sys
 import unittest
+from decimal import Decimal
 from pathlib import Path
 
 import pandas as pd
@@ -62,6 +63,33 @@ class DataAnalyzerTests(unittest.TestCase):
         self.assertIn("score", correlation.columns)
         self.assertNotIn("group", correlation.columns)
         self.assertAlmostEqual(correlation.loc["score", "hours"], 1.0)
+
+    def test_numeric_like_columns_are_converted_and_identifiers_excluded(self) -> None:
+        analyzer = DataAnalyzer(
+            pd.DataFrame(
+                {
+                    "student_id": [1, 2, 3],
+                    "attendance_percentage": [
+                        Decimal("75.5"),
+                        Decimal("80.0"),
+                        Decimal("92.5"),
+                    ],
+                    "gender": ["female", "male", "female"],
+                }
+            )
+        )
+
+        numeric_data = analyzer.get_numeric_data()
+
+        self.assertEqual(numeric_data.columns.tolist(), ["attendance_percentage"])
+        self.assertEqual(
+            numeric_data["attendance_percentage"].tolist(),
+            [75.5, 80.0, 92.5],
+        )
+        self.assertEqual(
+            analyzer.get_correlation().columns.tolist(),
+            ["attendance_percentage"],
+        )
 
 
 class VisualizationTests(unittest.TestCase):

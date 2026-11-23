@@ -11,7 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from modules.data_analysis import DataAnalyzer
+from modules.data_analysis import DataAnalyzer, is_identifier_column
 from modules.visualization import (
     create_bar_chart,
     create_correlation_heatmap,
@@ -127,10 +127,27 @@ if df.empty or len(df.columns) == 0:
 
 analyzer = DataAnalyzer(df)
 overview = analyzer.get_overview()
-numeric_columns = df.select_dtypes(include="number").columns.tolist()
-categorical_columns = df.select_dtypes(
-    include=["object", "category", "bool"]
-).columns.tolist()
+numeric_df = analyzer.get_numeric_data()
+numeric_columns = numeric_df.columns.tolist()
+plot_df = df.copy()
+for column in numeric_columns:
+    plot_df[column] = numeric_df[column]
+
+categorical_columns = [
+    column
+    for column in df.select_dtypes(include=["object", "category", "bool"]).columns
+    if column not in numeric_columns
+    and not is_identifier_column(column)
+    and df[column].notna().any()
+]
+bar_group_columns = [
+    column for column in categorical_columns
+    if df[column].nunique(dropna=False) <= 50
+]
+pie_columns = [
+    column for column in categorical_columns
+    if df[column].nunique(dropna=False) <= 12
+]
 
 with st.sidebar:
     st.divider()
@@ -190,10 +207,11 @@ with charts_tab:
         if not numeric_columns:
             st.info("Biểu đồ đường cần ít nhất một cột số.")
         else:
+            line_x_options = list(dict.fromkeys(numeric_columns + bar_group_columns))
             line_x = st.selectbox(
                 "Trục X (đường)",
-                df.columns.tolist(),
-                index=default_index(df.columns.tolist(), "study_hours"),
+                line_x_options,
+                index=default_index(line_x_options, "study_hours"),
             )
             line_y = st.selectbox(
                 "Chỉ số (đường)",
@@ -201,19 +219,19 @@ with charts_tab:
                 index=default_index(numeric_columns, "overall_score"),
             )
             st.plotly_chart(
-                create_line_chart(df, line_x, line_y, aggregation),
+                create_line_chart(plot_df, line_x, line_y, aggregation),
                 use_container_width=True,
             )
 
     with top_right:
         st.markdown("#### Biểu đồ cột")
-        if not numeric_columns or not categorical_columns:
+        if not numeric_columns or not bar_group_columns:
             st.info("Biểu đồ cột cần cột số và cột phân loại.")
         else:
             bar_group = st.selectbox(
                 "Nhóm theo (cột)",
-                categorical_columns,
-                index=default_index(categorical_columns, "school_type"),
+                bar_group_columns,
+                index=default_index(bar_group_columns, "school_type"),
             )
             bar_value = st.selectbox(
                 "Chỉ số (cột)",
@@ -221,19 +239,23 @@ with charts_tab:
                 index=default_index(numeric_columns, "overall_score"),
             )
             st.plotly_chart(
-                create_bar_chart(df, bar_group, bar_value, aggregation),
+                create_bar_chart(plot_df, bar_group, bar_value, aggregation),
                 use_container_width=True,
             )
 
     bottom_left, bottom_right = st.columns(2)
     with bottom_left:
         st.markdown("#### Biểu đồ tròn")
-        if not categorical_columns:
-            st.info("Biểu đồ tròn cần ít nhất một cột phân loại.")
+        if not pie_columns:
+            st.info("Biểu đồ tròn cần cột phân loại có tối đa 12 giá trị khác nhau.")
         else:
-            pie_column = st.selectbox("Cột phân loại (tròn)", categorical_columns)
+            pie_column = st.selectbox(
+                "Cột phân loại (tròn)",
+                pie_columns,
+                index=default_index(pie_columns, "school_type"),
+            )
             st.plotly_chart(
-                create_pie_chart(df, pie_column),
+                create_pie_chart(plot_df, pie_column),
                 use_container_width=True,
             )
 
@@ -250,16 +272,20 @@ with charts_tab:
                     index=default_index(numeric_columns, "study_hours"),
                 )
             with scatter_y_column:
+                scatter_y_options = [
+                    column for column in numeric_columns
+                    if column != scatter_x
+                ]
                 scatter_y = st.selectbox(
                     "Trục Y (phân tán)",
-                    numeric_columns,
-                    index=default_index(numeric_columns, "overall_score"),
+                    scatter_y_options,
+                    index=default_index(scatter_y_options, "overall_score"),
                 )
-            color_options = ["Không tô màu"] + categorical_columns
+            color_options = ["Không tô màu"] + bar_group_columns
             color_by = st.selectbox("Phân nhóm màu", color_options)
             st.plotly_chart(
                 create_scatter_chart(
-                    df,
+                    plot_df,
                     scatter_x,
                     scatter_y,
                     None if color_by == "Không tô màu" else color_by,
